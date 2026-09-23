@@ -1,5 +1,5 @@
 'use strict';
-// Abyss Garden v2.14.0 - classic browser bundle for file:// and http(s)
+// Abyss Garden v2.14.1 - classic browser bundle for file:// and http(s)
 
 // ---- data.js ----
 const BIOMES = [
@@ -868,6 +868,40 @@ function drawAttendant(layout){
   c.save();c.translate(Math.round(x),Math.round(y));c.shadowColor='rgba(92,211,220,.30)';c.shadowBlur=8;
   c.drawImage(shopNpcSheet,frame*cw,row*ch,cw,ch,-38,-82,76,84);c.restore();
 }
+function updateStorePlayer(dt){
+  const {w,h}=storeDims();
+  let dx=0,dy=0;
+  if(moveKeys.has('ArrowLeft')||moveKeys.has('KeyA')||moveKeys.has('left'))dx--;
+  if(moveKeys.has('ArrowRight')||moveKeys.has('KeyD')||moveKeys.has('right'))dx++;
+  if(moveKeys.has('ArrowUp')||moveKeys.has('KeyW')||moveKeys.has('up'))dy--;
+  if(moveKeys.has('ArrowDown')||moveKeys.has('KeyS')||moveKeys.has('down'))dy++;
+  let moved=false;
+  if(dx||dy){
+    player.target=null;
+    const len=Math.hypot(dx,dy)||1;
+    player.x+=dx/len*player.speed*dt/1000;
+    player.y+=dy/len*player.speed*dt/1000;
+    moved=true;
+    if(Math.abs(dx)>Math.abs(dy))player.dir=dx<0?'left':'right';
+    else player.dir=dy<0?'up':'down';
+  }else if(player.target){
+    const vx=player.target.x-player.x,vy=player.target.y-player.y,dist=Math.hypot(vx,vy);
+    if(dist<5)player.target=null;
+    else{
+      const step=Math.min(dist,player.speed*dt/1000);
+      player.x+=vx/dist*step;player.y+=vy/dist*step;
+      moved=true;
+      if(Math.abs(vx)>Math.abs(vy))player.dir=vx<0?'left':'right';
+      else player.dir=vy<0?'up':'down';
+    }
+  }
+  player.moving=moved;
+  if(moved)player.walk=(player.walk||0)+dt*.024;
+  else player.walk=(player.walk||0)*.86;
+  player.x=Math.max(18,Math.min(w-18,player.x));
+  player.y=Math.max(74,Math.min(h-18,player.y));
+}
+
 function drawCustomers(){for(const npc of shopFx.npcs){drawNpc(npc)}}
 function drawNpc(npc){
   const c=storeCtx;
@@ -958,7 +992,7 @@ async function enterAquarium(id){
   try{await Promise.all([loadAquariumSprites(tank.habitat,p=>updateLoading(tank,p)),wait(420)])}catch(err){hideLoading();toast('Falha ao carregar os sprites deste aquário');return}
   mode='aquarium';$('#storeView').hidden=true;$('#aquariumView').hidden=false;$('#lumensResource').hidden=false;$('#modeLabel').textContent=`${tank.name} · ${biome().name}`;food=[];particles=[];requestAnimationFrame(()=>{resizeAquarium();renderUI();updateLoading(tank,100);setTimeout(hideLoading,180)})
 }
-function returnToStore(){save();mode='store';releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.0';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
+function returnToStore(){save();mode='store';releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.1';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
 function showLoading(tank,p=0){const b=BIOMES.find(x=>x.id===tank.habitat);$('#loadingTitle').textContent=tank.name;$('#loadingEyebrow').textContent=`CARREGANDO ${b?.name?.toUpperCase()||'AQUÁRIO'}`;$('#loadingScreen').hidden=false;updateLoading(tank,p)}
 function updateLoading(tank,p){const value=Math.max(0,Math.min(100,Math.round(p)));$('#loadingBar').style.width=value+'%';$('#loadingPercent').textContent=value+'%';$('#loadingText').textContent=value<90?'Carregando sprites somente deste aquário':'Montando criaturas e ambiente'}
 function hideLoading(){$('#loadingScreen').hidden=true}
@@ -1024,7 +1058,7 @@ function loop(now){const dt=Math.min(50,now-last);last=now;updateSharedEconomy(d
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-content').forEach(x=>x.classList.remove('active'));t.classList.add('active');$(`#tab-${t.dataset.tab}`).classList.add('active')});
 $('#feedBtn').onclick=feed;$('#buyEggBtn').onclick=hatch;$('#codexBtn').onclick=showCodex;$('#modalClose').onclick=()=>$('#modal').close();$('#backToStoreBtn').onclick=returnToStore;
 $('#soundBtn').onclick=()=>{state.sound=!state.sound;$('#soundBtn').classList.toggle('muted',!state.sound);toast(state.sound?'Som ativado':'Som desativado');save()};
-$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.0-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
+$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.1-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
 $('#eventCard').onclick=()=>{if(!event||event.claimed)return;event.claimed=true;$('#eventCard').hidden=true;state.coins+=35;state.pearls++;gainXP(10);burst(dims().w*.5,dims().h*.35,'#fff29a');toast('Fragmento estelar coletado!');renderUI()};
 $('#collectRevenueBtn').onclick=()=>{const amount=collectVisitorRevenue(state);if(!amount){toast('Ainda não há receita para coletar');return}toast(`¤ ${amount} créditos coletados no caixa`);renderStoreHUD();save()};
 ['Todos','Comum','Raro','Épico','Lendário'].forEach(r=>{const b=document.createElement('button');b.textContent=r;b.className=r==='Todos'?'active':'';b.onclick=()=>{selectedFilter=r;$$('#rarityFilters button').forEach(x=>x.classList.toggle('active',x===b));renderUI()};$('#rarityFilters').append(b)});
