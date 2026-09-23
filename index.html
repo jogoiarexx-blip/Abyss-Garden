@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#06161d">
+  <meta name="description" content="Abyss Garden — administre uma loja de aquários vivos, crie linhagens e descubra criaturas.">
+  <title>Abyss Garden</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <section id="startScreen" class="start-screen">
+    <div class="start-depth"></div>
+    <div class="start-content">
+      <span class="start-emblem">◉</span><small>LOJA-SANTUÁRIO DE CRIATURAS</small>
+      <h1>ABYSS<br><i>GARDEN</i></h1>
+      <p>Administre sua galeria, compre aquários e cultive formas de vida de oceanos impossíveis.</p>
+      <button id="continueBtn">Abrir a loja <b>→</b></button>
+      <div class="start-stats"><span>8 espaços de aquário</span><span>24 espécies</span><span>Clientes pagam no balcão</span></div>
+    </div>
+  </section>
+
+  <section id="loadingScreen" class="loading-screen" hidden aria-live="polite">
+    <div class="loading-shade"></div>
+    <div class="loading-content">
+      <small id="loadingEyebrow">PREPARANDO AQUÁRIO</small>
+      <h2 id="loadingTitle">Carregando...</h2>
+      <div class="loading-bar"><i id="loadingBar"></i></div>
+      <div class="loading-row"><span id="loadingText">Carregando sprites do habitat</span><b id="loadingPercent">0%</b></div>
+    </div>
+  </section>
+
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">◉</span><div><strong>ABYSS GARDEN</strong><small id="modeLabel">Galeria aquática · v2.14.0</small></div></div>
+      <div class="resources" aria-label="Recursos">
+        <div class="resource store-credit"><span>¤</span><b id="shopCredits">0</b><small>créditos da loja</small></div>
+        <div class="resource" id="lumensResource"><span>✦</span><b id="coins">0</b><small>lúmens do aquário</small></div>
+        <div class="resource"><span>◈</span><b id="pearls">0</b><small>pérolas</small></div>
+        <div class="level"><span>Nível <b id="level">1</b></span><div><i id="xpBar"></i></div></div>
+      </div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Configurações">⚙</button>
+    </header>
+
+    <main id="storeView" class="store-view">
+      <canvas id="storeCanvas" aria-label="Loja de aquários. Use WASD ou setas para mover o guardião."></canvas>
+      <div class="store-title-card"><small>GALERIA DO GUARDIÃO</small><h1>Sua loja de aquários</h1><p>Cada tanque tem seus próprios peixes, água e Lúmens.</p></div>
+      <div class="store-actions">
+        <button id="collectRevenueBtn" class="store-action"><span>¤</span><div><b>Caixa da loja</b><small id="pendingRevenueText">Nenhuma receita aguardando</small></div></button>
+        <div class="store-help"><kbd>WASD</kbd><kbd>↑↓←→</kbd><span>mover</span><kbd>E</kbd><span>interagir</span></div>
+      </div>
+      <div id="storeToastStack" class="toast-stack store-toast-stack" aria-live="polite"></div>
+      <div id="nearbyPrompt" class="nearby-prompt" hidden></div>
+      <div class="mobile-move" aria-label="Controles de movimento">
+        <button data-move="up" aria-label="Mover para cima">▲</button>
+        <button data-move="left" aria-label="Mover para esquerda">◀</button>
+        <button data-move="down" aria-label="Mover para baixo">▼</button>
+        <button data-move="right" aria-label="Mover para direita">▶</button>
+        <button id="interactBtn" aria-label="Interagir">E</button>
+      </div>
+    </main>
+
+    <section id="aquariumView" class="aquarium-mode" hidden>
+      <main class="game-shell">
+        <section class="aquarium" id="aquarium">
+          <canvas id="gameCanvas" aria-label="Aquário interativo"></canvas>
+          <div class="water-glow"></div>
+          <button id="backToStoreBtn" class="back-store">← Voltar à loja</button>
+          <div class="biome-title"><small id="biomeEra">ERA I</small><h1 id="biomeName">Lago Astral</h1><p id="biomeEffect">Crescimento equilibrado</p></div>
+          <div class="tank-status"><div><span>≈</span><small>ÁGUA</small><b id="waterValue">100%</b></div><div><span>♥</span><small>HUMOR</small><b id="moodValue">100%</b></div><div><span>◖</span><small>CAPACIDADE</small><b id="capacityValue">0/8</b></div></div>
+          <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+          <button id="feedBtn" class="feed-btn"><span>●</span> Alimentar <kbd>Espaço</kbd></button>
+          <div class="event-card" id="eventCard" hidden><span id="eventIcon">☄</span><div><b id="eventTitle">Chuva estelar</b><small id="eventText">Toque nos fragmentos brilhantes</small></div><time id="eventTime">0:30</time></div>
+        </section>
+
+        <aside class="side-panel">
+          <nav class="tabs" aria-label="Painéis">
+            <button class="tab active" data-tab="habitat">Aquário</button>
+            <button class="tab" data-tab="creatures">Criaturas</button>
+            <button class="tab" data-tab="missions">Missões <i id="missionDot"></i></button>
+          </nav>
+
+          <div class="panel-scroll">
+            <section class="tab-content active" id="tab-habitat">
+              <div class="section-head"><div><small>TANQUE ATUAL</small><h2>Este aquário</h2></div><span id="biomeProgress">#1</span></div>
+              <div id="biomeList" class="biome-list"></div>
+              <div class="section-head compact"><div><small>AMBIENTE</small><h2>Decorações</h2></div></div>
+              <div id="decorList" class="decor-grid"></div>
+            </section>
+
+            <section class="tab-content" id="tab-creatures">
+              <div class="section-head"><div><small>COLEÇÃO</small><h2>Habitantes deste tanque</h2></div><span id="creatureCount">0/24</span></div>
+              <button id="buyEggBtn" class="capsule"><div class="egg">◉</div><div><b>Ovo abissal</b><small>Uma criatura aleatória</small></div><span>✦ <b id="eggPrice">120</b></span></button>
+              <p id="eggSpecies" class="egg-pool"></p><div class="filter-row" id="rarityFilters"></div>
+              <div id="creatureList" class="creature-list"></div>
+            </section>
+
+            <section class="tab-content" id="tab-missions">
+              <div class="section-head"><div><small>JORNADA</small><h2>Missões do dia</h2></div><span id="missionProgress">0/3</span></div>
+              <div id="missionList" class="mission-list"></div>
+              <div class="codex-card"><span>◇</span><div><small>ENCICLOPÉDIA</small><b id="codexText">0 espécies descobertas</b></div><button id="codexBtn">Abrir</button></div>
+            </section>
+          </div>
+        </aside>
+      </main>
+
+      <nav class="action-dock" aria-label="Áreas do santuário">
+        <button data-screen="shop"><span>▣</span>Suprimentos</button><button data-screen="lab"><span>⬡</span>Laboratório</button><button data-screen="expedition"><span>⌁</span>Expedições</button><button data-screen="sanctuary"><span>◈</span>Santuário</button><button data-screen="codex"><span>◇</span>Enciclopédia</button>
+      </nav>
+
+      <footer class="bottom-bar">
+        <p><span class="live-dot"></span> Salvamento automático</p>
+        <div class="quick-tips"><span>Economia interna: Lúmens</span><span>Economia externa: Créditos da loja</span></div>
+        <button id="soundBtn" class="sound-btn" aria-label="Alternar som">♫ <span>Som</span></button>
+      </footer>
+    </section>
+  </div>
+
+  <dialog id="modal"><button class="modal-close" id="modalClose" aria-label="Fechar">×</button><div id="modalBody"></div></dialog>
+  <script src="js/game.bundle.js"></script>
+</body>
+</html>
