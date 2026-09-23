@@ -1,4 +1,4 @@
-ABYSS GARDEN v2.14.0 — AQUARIUM SHOP CUSTOMERS
+ABYSS GARDEN v2.14.1 — AQUARIUM SHOP CUSTOMERS
 
 Novidades:
 - Player recortado e alinhado pela base dos pés, reduzindo pulos visuais.
@@ -8,3 +8,5 @@ Novidades:
 - Pagamento considera raridade, qualidade, estágio, mutação, água e decorações.
 - Valores pagos aparecem acima do caixa e acumulam nos Créditos da Loja.
 - Continua funcionando offline no Windows por duplo clique no index.html.
+
+HOTFIX v2.14.1: restaura updateStorePlayer no código modular e no bundle offline.
