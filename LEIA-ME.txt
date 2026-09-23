@@ -1,4 +1,4 @@
-ABYSS GARDEN v2.14.1 — AQUARIUM SHOP CUSTOMERS
+ABYSS GARDEN v2.14.2 — AQUARIUM SHOP CUSTOMERS
 
 Novidades:
 - Player recortado e alinhado pela base dos pés, reduzindo pulos visuais.
@@ -9,4 +9,13 @@ Novidades:
 - Valores pagos aparecem acima do caixa e acumulam nos Créditos da Loja.
 - Continua funcionando offline no Windows por duplo clique no index.html.
 
-HOTFIX v2.14.1: restaura updateStorePlayer no código modular e no bundle offline.
+HOTFIX v2.14.2: restaura updateStorePlayer no código modular e no bundle offline.
+
+CORREÇÕES v2.14.2:
+- Peixes, produção e água continuam simulando enquanto o jogador anda pela loja.
+- A tela inicial não roda a economia/NPCs por trás.
+- Missões do dia reiniciam automaticamente a cada novo dia local.
+- Migração de incubadoras antigas por habitat para aquários físicos.
+- Versão do save alinhada ao schema atual.
+- Receita passiva não duplica pagamentos dos NPCs enquanto a loja está visível.
+- Restaurado updateNearbyPrompt para evitar novo ReferenceError ao desenhar a loja.
