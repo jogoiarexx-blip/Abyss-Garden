@@ -17,9 +17,9 @@ import {MAX_AQUARIUMS,initializeStore,activeAquarium,aquariumById,aquariumForLeg
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const canvas=$('#gameCanvas'),ctx=canvas.getContext('2d');
 const storeCanvas=$('#storeCanvas'),storeCtx=storeCanvas.getContext('2d');
-const defaults={version:9,coins:350,shopCredits:1400,aquariums:[],activeAquariumId:null,pearls:4,dna:6,fossils:0,essence:0,water:100,xp:0,level:1,biome:'astral',unlocked:['astral'],decor:[],discovered:[],sound:true,feeds:0,collected:0,hatched:0,missions:[0,0,0],claimed:[false,false,false],lastSave:Date.now(),creatures:[],expedition:null,incubators:{},upgrades:{}};
-let state={...defaults},creatures=[],food=[],particles=[],selectedFilter='Todos',last=performance.now(),autosave=0,event=null,backgroundAccumulator=0,storeEconomyAccumulator=0;
-let mode='store',inspectedCreature=null,lastTimerRefresh=0,saveWarning=false,offlineReport=null;
+const defaults={version:10,coins:350,shopCredits:1400,aquariums:[],activeAquariumId:null,pearls:4,dna:6,fossils:0,essence:0,water:100,xp:0,level:1,biome:'astral',unlocked:['astral'],decor:[],discovered:[],sound:true,feeds:0,collected:0,hatched:0,missions:[0,0,0],claimed:[false,false,false],missionDate:'',lastSave:Date.now(),creatures:[],expedition:null,incubators:{},upgrades:{}};
+let state={...defaults},creatures=[],food=[],particles=[],selectedFilter='Todos',last=performance.now(),autosave=0,event=null,backgroundAccumulator=0,storeEconomyAccumulator=0,storeBackgroundAccumulator=0;
+let mode='start',inspectedCreature=null,lastTimerRefresh=0,saveWarning=false,offlineReport=null;
 const player={x:0,y:0,r:15,speed:230,target:null,initialized:false,dir:'down',walk:0};
 const shopFx={npcs:[],spawnCd:1900,customerSeq:0,floaters:[]};
 const moveKeys=new Set();
@@ -34,6 +34,17 @@ function biome(){return BIOMES.find(b=>b.id===aq().habitat)||BIOMES[0]}
 function dims(){return {w:canvas.logicalWidth||900,h:canvas.logicalHeight||600}}
 function storeDims(){return {w:storeCanvas.logicalWidth||1200,h:storeCanvas.logicalHeight||700}}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+function localDateKey(){const d=new Date(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${d.getFullYear()}-${m}-${day}`}
+function ensureDailyMissions(){const today=localDateKey();if(state.missionDate!==today){state.missionDate=today;state.missions=[0,0,0];state.claimed=[false,false,false]}}
+function migrateLegacyIncubators(){
+  ensureIncubators(state);
+  for(const habitat of BIOMES.map(b=>b.id)){
+    const old=state.incubators?.[habitat];if(!old)continue;
+    const target=state.aquariums.find(a=>a.habitat===habitat);
+    if(target&&!state.incubators[target.id])state.incubators[target.id]={...old,aquariumId:target.id,habitat};
+    delete state.incubators[habitat];
+  }
+}
 function storeLayout(){
   const {w,h}=storeDims();
   const entrance={x:w*.43,y:18,w:w*.14,h:58,cx:w*.5};
@@ -45,7 +56,7 @@ function storeLayout(){
 }
 
 function load(){
-  state=SaveManager.load(defaults);initializeStore(state);ensureUpgrades(state);ensureIncubators(state);
+  state=SaveManager.load(defaults);initializeStore(state);ensureUpgrades(state);ensureIncubators(state);migrateLegacyIncubators();ensureDailyMissions();
   const fake={width:900,height:600};
   creatures=state.creatures.map(raw=>{
     const sp=SPECIES.find(s=>s.id===raw.id);if(!sp)return null;
@@ -142,9 +153,21 @@ function updateAquarium(dt){
   if(Math.random()<dt*.000003&&!event)startEvent()
 }
 function updateSharedEconomy(dt){
+  if(mode==='start')return;
   storeEconomyAccumulator+=dt;autosave+=dt;
-  if(storeEconomyAccumulator>=1000){accrueVisitorRevenue(state,creatures,storeEconomyAccumulator/1000);storeEconomyAccumulator=0;if(mode==='store')renderStoreHUD()}
-  if(autosave>12000){save();autosave=0;if(mode==='aquarium')renderVitals();else renderStoreHUD()}
+  if(storeEconomyAccumulator>=1000){
+    const elapsed=storeEconomyAccumulator/1000;storeEconomyAccumulator=0;
+    if(mode!=='store')accrueVisitorRevenue(state,creatures,elapsed);
+    if(mode==='store')renderStoreHUD();
+  }
+  if(autosave>12000){save();autosave=0;if(mode==='aquarium')renderVitals();else if(mode==='store')renderStoreHUD()}
+}
+
+function updateStoreBackground(dt){
+  storeBackgroundAccumulator+=dt;if(storeBackgroundAccumulator<1000)return;
+  const elapsed=storeBackgroundAccumulator;storeBackgroundAccumulator=0;
+  for(const tank of state.aquariums)waterDecay(tank,elapsed,decayMultiplier(state));
+  for(const c of creatures)updateCreature(c,elapsed);
 }
 
 function drawAquarium(){
@@ -170,6 +193,12 @@ function nearestInteraction(){
   if(cashDist<120&&(!best||cashDist<best.distance-10))best={kind:'cashier',distance:cashDist};
   return best;
 }
+function updateNearbyPrompt(near){
+  const el=$('#nearbyPrompt');if(!el)return;if(!near){el.hidden=true;return}
+  if(near.kind==='cashier'){const pending=Math.floor(pendingRevenueTotal(state));el.innerHTML=pending?`Pressione <b>E</b> no <b>Caixa da Loja</b> para coletar <b>¤ ${pending}</b>`:`<b>Mira</b> está no caixa · nenhuma receita aguardando`;el.hidden=false;return}
+  const tank=near.aquarium;if(tank)el.innerHTML=`Pressione <b>E</b> para entrar em <b>${tank.name}</b>`;else el.innerHTML=`Pressione <b>E</b> para comprar um aquário · <b>¤ ${nextAquariumCost(state)}</b>`;el.hidden=false
+}
+
 function drawStore(){
   const {w,h}=storeDims(),t=performance.now(),layout=storeLayout(),near=nearestInteraction();
   const g=storeCtx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#123947');g.addColorStop(.42,'#0a2530');g.addColorStop(1,'#061317');storeCtx.fillStyle=g;storeCtx.fillRect(0,0,w,h);
@@ -352,7 +381,7 @@ async function enterAquarium(id){
   try{await Promise.all([loadAquariumSprites(tank.habitat,p=>updateLoading(tank,p)),wait(420)])}catch(err){hideLoading();toast('Falha ao carregar os sprites deste aquário');return}
   mode='aquarium';$('#storeView').hidden=true;$('#aquariumView').hidden=false;$('#lumensResource').hidden=false;$('#modeLabel').textContent=`${tank.name} · ${biome().name}`;food=[];particles=[];requestAnimationFrame(()=>{resizeAquarium();renderUI();updateLoading(tank,100);setTimeout(hideLoading,180)})
 }
-function returnToStore(){save();mode='store';releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.1';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
+function returnToStore(){save();mode='store';storeBackgroundAccumulator=0;releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.2';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
 function showLoading(tank,p=0){const b=BIOMES.find(x=>x.id===tank.habitat);$('#loadingTitle').textContent=tank.name;$('#loadingEyebrow').textContent=`CARREGANDO ${b?.name?.toUpperCase()||'AQUÁRIO'}`;$('#loadingScreen').hidden=false;updateLoading(tank,p)}
 function updateLoading(tank,p){const value=Math.max(0,Math.min(100,Math.round(p)));$('#loadingBar').style.width=value+'%';$('#loadingPercent').textContent=value+'%';$('#loadingText').textContent=value<90?'Carregando sprites somente deste aquário':'Montando criaturas e ambiente'}
 function hideLoading(){$('#loadingScreen').hidden=true}
@@ -373,7 +402,7 @@ function refreshIncubatorButton(){
   if(!status.active){btn.innerHTML=`${eggArt(tank.habitat)}<div><b>${egg.name}</b><small>Incubar por ~${duration}s</small></div><span>✦ ${egg.price}</span>`;return}if(status.ready){btn.innerHTML=`${eggArt(tank.habitat)}<div><b>Ovo pronto para nascer!</b><small>${egg.name} · clique para chocar</small></div><span>ABRIR</span>`;return}const m=Math.floor(status.remaining/60),s=String(status.remaining%60).padStart(2,'0');btn.innerHTML=`${eggArt(tank.habitat)}<div><b>Incubando ${egg.name}</b><small>Continua mesmo fora deste aquário</small></div><span>⏳ ${m}:${s}</span>`
 }
 function renderUI(){
-  if(mode!=='aquarium')return;const tank=aq(),b=biome();$('#shopCredits').textContent=Math.floor(state.shopCredits);$('#coins').textContent=Math.floor(state.coins);$('#pearls').textContent=state.pearls;$('#level').textContent=state.level;$('#xpBar').style.width=`${Math.min(100,state.xp/(state.level*100)*100)}%`;$('#lumensResource').hidden=false;refreshIncubatorButton();$('#eggSpecies').textContent=eggPreview(tank.habitat);
+  if(mode!=='aquarium')return;ensureDailyMissions();const tank=aq(),b=biome();$('#shopCredits').textContent=Math.floor(state.shopCredits);$('#coins').textContent=Math.floor(state.coins);$('#pearls').textContent=state.pearls;$('#level').textContent=state.level;$('#xpBar').style.width=`${Math.min(100,state.xp/(state.level*100)*100)}%`;$('#lumensResource').hidden=false;refreshIncubatorButton();$('#eggSpecies').textContent=eggPreview(tank.habitat);
   $('#biomeName').textContent=tank.name;$('#biomeEra').textContent=b.era;$('#biomeEffect').textContent=`${b.name} · ${b.bonus}`;$('#aquarium').style.setProperty('--accent',b.colors[2]);$('#biomeProgress').textContent=`#${tank.slot+1}`;
   const pending=Math.floor(tank.pendingRevenue||0);$('#biomeList').innerHTML=`<article class="aquarium-current" style="--aq:${b.colors[2]}"><div class="aq-heading"><span class="aq-dot"></span><div><b>${tank.name}</b><small>${b.name} · tanque físico independente</small></div></div><div class="aq-economies"><div><small>ECONOMIA INTERNA</small><b>✦ ${Math.floor(tank.lumens)}</b></div><div><small>RECEITA NA LOJA</small><b>¤ ${pending}</b></div></div><button class="primary wide" id="panelBackStore">Voltar para a loja</button></article>`;
   $('#decorList').innerHTML=DECORS.map(d=>`<button class="decor ${tank.decor.includes(d.id)?'owned':''}" data-decor="${d.id}"><span style="color:${d.color}">${d.icon}</span><b>${d.name}</b><small>${tank.decor.includes(d.id)?'No aquário':`✦ ${d.price}`}</small></button>`).join('');
@@ -413,12 +442,12 @@ function bindScreen(name){
 }
 function startEvent(){if(mode!=='aquarium')return;event={left:30,claimed:false};$('#eventCard').hidden=false;const timer=setInterval(()=>{if(mode!=='aquarium'||!event){clearInterval(timer);return}event.left--;$('#eventTime').textContent=`0:${String(event.left).padStart(2,'0')}`;if(event.left<=0){clearInterval(timer);event=null;$('#eventCard').hidden=true}},1000)}
 
-function loop(now){const dt=Math.min(50,now-last);last=now;updateSharedEconomy(dt);if(mode==='aquarium'){updateAquarium(dt);drawAquarium();if(now-lastTimerRefresh>250){refreshGrowthTimer();refreshIncubatorButton();lastTimerRefresh=now}}else{updateStorePlayer(dt);updateNpcs(dt);drawStore()}requestAnimationFrame(loop)}
+function loop(now){const dt=Math.min(50,now-last);last=now;if(mode!=='start')updateSharedEconomy(dt);if(mode==='aquarium'){updateAquarium(dt);drawAquarium();if(now-lastTimerRefresh>250){refreshGrowthTimer();refreshIncubatorButton();lastTimerRefresh=now}}else if(mode==='store'){updateStoreBackground(dt);updateStorePlayer(dt);updateNpcs(dt);drawStore()}requestAnimationFrame(loop)}
 
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-content').forEach(x=>x.classList.remove('active'));t.classList.add('active');$(`#tab-${t.dataset.tab}`).classList.add('active')});
 $('#feedBtn').onclick=feed;$('#buyEggBtn').onclick=hatch;$('#codexBtn').onclick=showCodex;$('#modalClose').onclick=()=>$('#modal').close();$('#backToStoreBtn').onclick=returnToStore;
 $('#soundBtn').onclick=()=>{state.sound=!state.sound;$('#soundBtn').classList.toggle('muted',!state.sound);toast(state.sound?'Som ativado':'Som desativado');save()};
-$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.1-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
+$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.2-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
 $('#eventCard').onclick=()=>{if(!event||event.claimed)return;event.claimed=true;$('#eventCard').hidden=true;state.coins+=35;state.pearls++;gainXP(10);burst(dims().w*.5,dims().h*.35,'#fff29a');toast('Fragmento estelar coletado!');renderUI()};
 $('#collectRevenueBtn').onclick=()=>{const amount=collectVisitorRevenue(state);if(!amount){toast('Ainda não há receita para coletar');return}toast(`¤ ${amount} créditos coletados no caixa`);renderStoreHUD();save()};
 ['Todos','Comum','Raro','Épico','Lendário'].forEach(r=>{const b=document.createElement('button');b.textContent=r;b.className=r==='Todos'?'active':'';b.onclick=()=>{selectedFilter=r;$$('#rarityFilters button').forEach(x=>x.classList.toggle('active',x===b));renderUI()};$('#rarityFilters').append(b)});
@@ -427,7 +456,7 @@ storeCanvas.addEventListener('pointerdown',e=>{const r=storeCanvas.getBoundingCl
 window.addEventListener('keydown',e=>{if($('#modal').open)return;if(mode==='aquarium'&&e.code==='Space'&&!e.repeat&&!['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName)){e.preventDefault();feed();return}if(mode==='store'){if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)){moveKeys.add(e.code);e.preventDefault()}if(e.code==='KeyE'&&!e.repeat){interactNearest();e.preventDefault()}}});
 window.addEventListener('keyup',e=>moveKeys.delete(e.code));window.addEventListener('resize',()=>{resizeStore();resizeAquarium()});window.addEventListener('beforeunload',save);
 $$('[data-move]').forEach(btn=>{const key=btn.dataset.move;const down=e=>{e.preventDefault();moveKeys.add(key)},up=e=>{e.preventDefault();moveKeys.delete(key)};btn.addEventListener('pointerdown',down);btn.addEventListener('pointerup',up);btn.addEventListener('pointercancel',up);btn.addEventListener('pointerleave',up)});$('#interactBtn').onclick=interactNearest;
-$('#continueBtn').onclick=()=>{$('#startScreen').classList.add('leaving');setTimeout(()=>{$('#startScreen').hidden=true;mode='store';$('#storeView').hidden=false;$('#aquariumView').hidden=true;releaseAquariumSprites();resizeStore();renderStoreHUD();shopFx.spawnCd=1200;if(offlineReport){const r=offlineReport;offlineReport=null;showOffline(r.seconds,r.earned,r.fossils)}},650)};
+$('#continueBtn').onclick=()=>{$('#startScreen').classList.add('leaving');setTimeout(()=>{$('#startScreen').hidden=true;mode='store';storeBackgroundAccumulator=0;storeEconomyAccumulator=0;$('#storeView').hidden=false;$('#aquariumView').hidden=true;releaseAquariumSprites();resizeStore();renderStoreHUD();shopFx.spawnCd=1200;if(offlineReport){const r=offlineReport;offlineReport=null;showOffline(r.seconds,r.earned,r.fossils)}},650)};
 $$('[data-screen]').forEach(b=>b.onclick=()=>openScreen(b.dataset.screen));
 
 load();requestAnimationFrame(loop);
