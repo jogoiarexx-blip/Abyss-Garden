@@ -184,6 +184,83 @@ function storeSlotRects(){
   for(let i=0;i<MAX_AQUARIUMS;i++){const col=i%cols,row=Math.floor(i/cols),x=margin+col*cellW+(cellW-tankW)/2,y=top+row*rowH+(rowH-tankH)/2;out.push({slot:i,x,y,w:tankW,h:tankH,cx:x+tankW/2,cy:y+tankH/2})}return out
 }
 function aquariumAtSlot(slot){return state.aquariums.find(a=>a.slot===slot)||null}
+function storeCollisionRects(radius=0){
+  const l=storeLayout(),pad=Math.max(0,Number(radius)||0),rects=[];
+  const add=(r,extra=0)=>rects.push({x:r.x-pad-extra,y:r.y-pad-extra,w:r.w+(pad+extra)*2,h:r.h+(pad+extra)*2});
+  add(l.counter,4);add(l.leftShelf,3);add(l.rightShelf,3);add(l.lounge,3);
+  for(const r of storeSlotRects())if(aquariumAtSlot(r.slot))add({x:r.x-7,y:r.y-9,w:r.w+14,h:r.h+18},3);
+  return rects;
+}
+function pointInRect(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
+function storePointFree(x,y,radius=12){
+  const {w,h}=storeDims(),r=Math.max(1,radius);
+  if(x<r+8||x>w-r-8||y<74+r||y>h-r-8)return false;
+  return !storeCollisionRects(r).some(rect=>pointInRect(x,y,rect));
+}
+function moveStoreActor(actor,dx,dy,radius=12){
+  const ox=actor.x,oy=actor.y;let nx=ox+dx,ny=oy;
+  if(storePointFree(nx,ny,radius))actor.x=nx;
+  nx=actor.x;ny=oy+dy;
+  if(storePointFree(nx,ny,radius))actor.y=ny;
+  return Math.hypot(actor.x-ox,actor.y-oy);
+}
+function nearestFreeStorePoint(point,radius=12){
+  const cell=26,{w,h}=storeDims(),base={x:Math.max(radius+10,Math.min(w-radius-10,point.x)),y:Math.max(74+radius,Math.min(h-radius-10,point.y))};
+  if(storePointFree(base.x,base.y,radius))return base;
+  for(let ring=1;ring<=9;ring++)for(let gy=-ring;gy<=ring;gy++)for(let gx=-ring;gx<=ring;gx++){
+    if(Math.max(Math.abs(gx),Math.abs(gy))!==ring)continue;
+    const p={x:base.x+gx*cell,y:base.y+gy*cell};if(storePointFree(p.x,p.y,radius))return p;
+  }
+  return base;
+}
+function storeSegmentFree(a,b,radius=12){
+  const d=Math.hypot(b.x-a.x,b.y-a.y),steps=Math.max(1,Math.ceil(d/12));
+  for(let i=1;i<=steps;i++){const t=i/steps,x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t;if(!storePointFree(x,y,radius))return false}
+  return true;
+}
+function planStorePath(start,target,radius=12){
+  const cell=26,{w,h}=storeDims(),minY=74+radius,maxX=Math.max(1,Math.floor((w-radius-9)/cell)),maxY=Math.max(1,Math.floor((h-radius-9-minY)/cell));
+  const safeTarget=nearestFreeStorePoint(target,radius),safeStart=nearestFreeStorePoint(start,radius);
+  if(storeSegmentFree(safeStart,safeTarget,radius))return [safeTarget];
+  const toGrid=p=>({x:Math.max(0,Math.min(maxX,Math.round((p.x-radius-9)/cell))),y:Math.max(0,Math.min(maxY,Math.round((p.y-minY)/cell)))}),
+        toWorld=g=>({x:radius+9+g.x*cell,y:minY+g.y*cell});
+  const s=toGrid(safeStart),goal=toGrid(safeTarget),key=(x,y)=>`${x},${y}`,open=[{x:s.x,y:s.y,f:0}],came=new Map(),gScore=new Map([[key(s.x,s.y),0]]),closed=new Set();
+  const dirs=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+  let found=null,guard=0;
+  while(open.length&&guard++<3500){
+    open.sort((a,b)=>a.f-b.f);const cur=open.shift(),ck=key(cur.x,cur.y);if(closed.has(ck))continue;closed.add(ck);
+    if(cur.x===goal.x&&cur.y===goal.y){found=cur;break}
+    for(const [dx,dy,cost] of dirs){const x=cur.x+dx,y=cur.y+dy;if(x<0||y<0||x>maxX||y>maxY)continue;const wp=toWorld({x,y});if(!storePointFree(wp.x,wp.y,radius))continue;
+      if(dx&&dy){const p1=toWorld({x:cur.x+dx,y:cur.y}),p2=toWorld({x:cur.x,y:cur.y+dy});if(!storePointFree(p1.x,p1.y,radius)||!storePointFree(p2.x,p2.y,radius))continue}
+      const nk=key(x,y),tent=(gScore.get(ck)??1e9)+cost;if(tent>=(gScore.get(nk)??1e9))continue;came.set(nk,ck);gScore.set(nk,tent);const hcost=Math.hypot(goal.x-x,goal.y-y);open.push({x,y,f:tent+hcost});
+    }
+  }
+  if(!found)return [safeTarget];
+  const cells=[];let k=key(goal.x,goal.y);cells.push(goal);while(k!==key(s.x,s.y)&&came.has(k)){k=came.get(k);const [x,y]=k.split(',').map(Number);cells.push({x,y})}cells.reverse();
+  let raw=cells.map(toWorld);raw.push(safeTarget);const simplified=[],origin=safeStart;let anchor=origin,i=0;
+  while(i<raw.length){let best=i;for(let j=i;j<raw.length;j++){if(storeSegmentFree(anchor,raw[j],radius))best=j;else break}const p=raw[best];simplified.push(p);anchor=p;i=best+1}
+  return simplified;
+}
+function setNpcTarget(npc,point){
+  npc.target=nearestFreeStorePoint(point,11);npc.path=planStorePath({x:npc.x,y:npc.y},npc.target,11);npc.pathIndex=0;
+}
+function moveNpcAlongPath(npc,dt){
+  if(!npc.path?.length)setNpcTarget(npc,npc.target||{x:npc.x,y:npc.y});
+  let wp=npc.path[Math.min(npc.pathIndex||0,npc.path.length-1)]||npc.target,dx=wp.x-npc.x,dy=wp.y-npc.y,dist=Math.hypot(dx,dy);
+  if(dist<7&&(npc.pathIndex||0)<npc.path.length-1){npc.pathIndex=(npc.pathIndex||0)+1;wp=npc.path[npc.pathIndex];dx=wp.x-npc.x;dy=wp.y-npc.y;dist=Math.hypot(dx,dy)}
+  const final=(npc.pathIndex||0)>=npc.path.length-1;
+  if(final&&dist<8)return true;
+  if(dist>0){const step=Math.min(dist,npc.speed*dt/1000),moved=moveStoreActor(npc,dx/dist*step,dy/dist*step,11);if(moved<.05){setNpcTarget(npc,npc.target);return false}npc.walk=(npc.walk||0)+dt*.024;npc.moving=true;npc.dir=Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'up':'down')}
+  return false;
+}
+function separateStoreNpcs(){
+  for(let i=0;i<shopFx.npcs.length;i++)for(let j=i+1;j<shopFx.npcs.length;j++){
+    const a=shopFx.npcs[i],b=shopFx.npcs[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||.001,min=19;if(d>=min)continue;const push=(min-d)*.18,nx=dx/d,ny=dy/d;
+    if(storePointFree(a.x-nx*push,a.y-ny*push,10)){a.x-=nx*push;a.y-=ny*push}if(storePointFree(b.x+nx*push,b.y+ny*push,10)){b.x+=nx*push;b.y+=ny*push}
+  }
+}
+
+
 function nearestStoreSlot(){let best=null,dist=Infinity;for(const r of storeSlotRects()){const d=Math.hypot(player.x-r.cx,player.y-r.cy);if(d<dist){dist=d;best=r}}return dist<150?{rect:best,aquarium:aquariumAtSlot(best.slot),distance:dist}:null}
 function nearestInteraction(){
   const nearTank=nearestStoreSlot(),layout=storeLayout();
@@ -258,37 +335,16 @@ function drawAttendant(layout){
   c.drawImage(shopNpcSheet,frame*cw,row*ch,cw,ch,-38,-82,76,84);c.restore();
 }
 function updateStorePlayer(dt){
-  const {w,h}=storeDims();
-  let dx=0,dy=0;
-  if(moveKeys.has('ArrowLeft')||moveKeys.has('KeyA')||moveKeys.has('left'))dx--;
-  if(moveKeys.has('ArrowRight')||moveKeys.has('KeyD')||moveKeys.has('right'))dx++;
-  if(moveKeys.has('ArrowUp')||moveKeys.has('KeyW')||moveKeys.has('up'))dy--;
-  if(moveKeys.has('ArrowDown')||moveKeys.has('KeyS')||moveKeys.has('down'))dy++;
+  let dx=0,dy=0;if(moveKeys.has('ArrowLeft')||moveKeys.has('KeyA')||moveKeys.has('left'))dx--;if(moveKeys.has('ArrowRight')||moveKeys.has('KeyD')||moveKeys.has('right'))dx++;if(moveKeys.has('ArrowUp')||moveKeys.has('KeyW')||moveKeys.has('up'))dy--;if(moveKeys.has('ArrowDown')||moveKeys.has('KeyS')||moveKeys.has('down'))dy++;
   let moved=false;
   if(dx||dy){
-    player.target=null;
-    const len=Math.hypot(dx,dy)||1;
-    player.x+=dx/len*player.speed*dt/1000;
-    player.y+=dy/len*player.speed*dt/1000;
-    moved=true;
-    if(Math.abs(dx)>Math.abs(dy))player.dir=dx<0?'left':'right';
-    else player.dir=dy<0?'up':'down';
+    player.target=null;const len=Math.hypot(dx,dy)||1,step=player.speed*dt/1000;const amount=moveStoreActor(player,dx/len*step,dy/len*step,14);moved=amount>.02;
+    if(Math.abs(dx)>Math.abs(dy))player.dir=dx<0?'left':'right';else player.dir=dy<0?'up':'down';
   }else if(player.target){
-    const vx=player.target.x-player.x,vy=player.target.y-player.y,dist=Math.hypot(vx,vy);
-    if(dist<5)player.target=null;
-    else{
-      const step=Math.min(dist,player.speed*dt/1000);
-      player.x+=vx/dist*step;player.y+=vy/dist*step;
-      moved=true;
-      if(Math.abs(vx)>Math.abs(vy))player.dir=vx<0?'left':'right';
-      else player.dir=vy<0?'up':'down';
-    }
+    const target=nearestFreeStorePoint(player.target,14),vx=target.x-player.x,vy=target.y-player.y,dist=Math.hypot(vx,vy);
+    if(dist<5)player.target=null;else{const step=Math.min(dist,player.speed*dt/1000),amount=moveStoreActor(player,vx/dist*step,vy/dist*step,14);moved=amount>.02;if(!moved)player.target=null;if(Math.abs(vx)>Math.abs(vy))player.dir=vx<0?'left':'right';else player.dir=vy<0?'up':'down'}
   }
-  player.moving=moved;
-  if(moved)player.walk=(player.walk||0)+dt*.024;
-  else player.walk=(player.walk||0)*.86;
-  player.x=Math.max(18,Math.min(w-18,player.x));
-  player.y=Math.max(74,Math.min(h-18,player.y));
+  player.moving=moved;if(moved)player.walk=(player.walk||0)+dt*.024;else player.walk=(player.walk||0)*.86;
 }
 
 function drawCustomers(){for(const npc of shopFx.npcs){drawNpc(npc)}}
@@ -342,7 +398,8 @@ function spawnNpc(){
   if(mode!=='store'||shopFx.npcs.length>=7||!state.aquariums.length)return;
   const layout=storeLayout(),viewed=pickCustomerTank(),point=customerTankPoint(viewed),variant=shopFx.customerSeq%4,palette=[['#ffeaa8','#507d88'],['#fbd0ff','#5671a9'],['#d2ffe2','#447b67'],['#ffd5c1','#8b6359']][variant];
   shopFx.customerSeq++;
-  shopFx.npcs.push({id:`npc-${shopFx.customerSeq}`,x:layout.entrance.cx+(Math.random()*34-17),y:layout.entrance.h+18,speed:92+Math.random()*34,dir:'down',walk:0,state:'toTank',viewedAquariumId:viewed.id,target:point,linger:0,palette,variant,visits:0,maxVisits:1+Math.floor(Math.random()*3),seen:[viewed.id],favoriteAquariumId:viewed.id,favoriteScore:0,queueLane:shopFx.customerSeq%3,moving:true,paid:false});
+  const npc={id:`npc-${shopFx.customerSeq}`,x:layout.entrance.cx+(Math.random()*34-17),y:Math.max(88,layout.entrance.h+26),speed:92+Math.random()*34,dir:'down',walk:0,state:'toTank',viewedAquariumId:viewed.id,target:point,linger:0,palette,variant,visits:0,maxVisits:1+Math.floor(Math.random()*3),seen:[viewed.id],favoriteAquariumId:viewed.id,favoriteScore:0,queueLane:shopFx.customerSeq%3,moving:true,paid:false,path:[],pathIndex:0};
+  const safe=nearestFreeStorePoint({x:npc.x,y:npc.y},11);npc.x=safe.x;npc.y=safe.y;setNpcTarget(npc,point);shopFx.npcs.push(npc);
 }
 function updateNpcs(dt){
   if(mode!=='store'){shopFx.npcs.length=0;shopFx.floaters.length=0;return}
@@ -357,23 +414,20 @@ function updateNpcs(dt){
       if(npc.linger<=0){
         const score=aquariumCustomerAppeal(tank)*(.9+Math.random()*.22);if(score>npc.favoriteScore){npc.favoriteScore=score;npc.favoriteAquariumId=tank?.id||npc.favoriteAquariumId}
         npc.visits++;
-        if(npc.visits<npc.maxVisits&&state.aquariums.length>1){const next=pickCustomerTank(npc.seen);if(next){npc.seen.push(next.id);npc.viewedAquariumId=next.id;npc.target=customerTankPoint(next);npc.state='toTank';continue}}
-        npc.target=customerCashierPoint(npc);npc.state='toCashier';
+        if(npc.visits<npc.maxVisits&&state.aquariums.length>1){const next=pickCustomerTank(npc.seen);if(next){npc.seen.push(next.id);npc.viewedAquariumId=next.id;setNpcTarget(npc,customerTankPoint(next));npc.state='toTank';continue}}
+        setNpcTarget(npc,customerCashierPoint(npc));npc.state='toCashier';
       }continue;
     }
     if(npc.state==='pay'){
-      npc.linger-=dt;npc.dir='up';if(npc.linger<=0){if(!npc.paid){npc.paid=true;customerPayment(npc)}npc.target={x:layout.entrance.cx,y:layout.entrance.h+10};npc.state='exit';}continue;
+      npc.linger-=dt;npc.dir='up';if(npc.linger<=0){if(!npc.paid){npc.paid=true;customerPayment(npc)}setNpcTarget(npc,{x:layout.entrance.cx,y:88});npc.state='exit'}continue;
     }
-    const tx=npc.target.x,ty=npc.target.y,dx=tx-npc.x,dy=ty-npc.y,dist=Math.hypot(dx,dy);
-    if(dist<8){
+    if(moveNpcAlongPath(npc,dt)){
       if(npc.state==='toTank'){npc.state='browse';npc.linger=1800+Math.random()*2500;npc.walk=0;npc.moving=false}
       else if(npc.state==='toCashier'){npc.state='pay';npc.linger=700+Math.random()*650;npc.walk=0;npc.dir='up'}
       else if(npc.state==='exit'){npc.remove=true}
-      continue;
     }
-    const step=Math.min(dist,npc.speed*dt/1000);npc.x+=dx/dist*step;npc.y+=dy/dist*step;npc.walk=(npc.walk||0)+dt*.024;npc.moving=true;npc.dir=Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'up':'down');
   }
-  shopFx.npcs=shopFx.npcs.filter(n=>!n.remove);
+  separateStoreNpcs();shopFx.npcs=shopFx.npcs.filter(n=>!n.remove);
 }
 
 async function enterAquarium(id){
@@ -381,7 +435,7 @@ async function enterAquarium(id){
   try{await Promise.all([loadAquariumSprites(tank.habitat,p=>updateLoading(tank,p)),wait(420)])}catch(err){hideLoading();toast('Falha ao carregar os sprites deste aquário');return}
   mode='aquarium';$('#storeView').hidden=true;$('#aquariumView').hidden=false;$('#lumensResource').hidden=false;$('#modeLabel').textContent=`${tank.name} · ${biome().name}`;food=[];particles=[];requestAnimationFrame(()=>{resizeAquarium();renderUI();updateLoading(tank,100);setTimeout(hideLoading,180)})
 }
-function returnToStore(){save();mode='store';storeBackgroundAccumulator=0;releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.2';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
+function returnToStore(){save();mode='store';storeBackgroundAccumulator=0;releaseAquariumSprites();$('#aquariumView').hidden=true;$('#storeView').hidden=false;$('#lumensResource').hidden=true;$('#modeLabel').textContent='Galeria aquática · v2.14.3';food=[];particles=[];event=null;$('#eventCard').hidden=true;resizeStore();renderStoreHUD()}
 function showLoading(tank,p=0){const b=BIOMES.find(x=>x.id===tank.habitat);$('#loadingTitle').textContent=tank.name;$('#loadingEyebrow').textContent=`CARREGANDO ${b?.name?.toUpperCase()||'AQUÁRIO'}`;$('#loadingScreen').hidden=false;updateLoading(tank,p)}
 function updateLoading(tank,p){const value=Math.max(0,Math.min(100,Math.round(p)));$('#loadingBar').style.width=value+'%';$('#loadingPercent').textContent=value+'%';$('#loadingText').textContent=value<90?'Carregando sprites somente deste aquário':'Montando criaturas e ambiente'}
 function hideLoading(){$('#loadingScreen').hidden=true}
@@ -447,7 +501,7 @@ function loop(now){const dt=Math.min(50,now-last);last=now;if(mode!=='start')upd
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.tab-content').forEach(x=>x.classList.remove('active'));t.classList.add('active');$(`#tab-${t.dataset.tab}`).classList.add('active')});
 $('#feedBtn').onclick=feed;$('#buyEggBtn').onclick=hatch;$('#codexBtn').onclick=showCodex;$('#modalClose').onclick=()=>$('#modal').close();$('#backToStoreBtn').onclick=returnToStore;
 $('#soundBtn').onclick=()=>{state.sound=!state.sound;$('#soundBtn').classList.toggle('muted',!state.sound);toast(state.sound?'Som ativado':'Som desativado');save()};
-$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.2-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
+$('#settingsBtn').onclick=()=>{$('#modalBody').innerHTML=`<small>PAINEL DO GUARDIÃO</small><h2>Sua galeria</h2><div class="resource-strip"><b>¤ ${Math.floor(state.shopCredits)} créditos</b><b>⬡ ${state.dna} DNA</b><b>◫ ${state.fossils} fósseis</b><b>◆ ${state.essence} essência</b></div><p>Existem duas economias: Créditos da Loja compram novos aquários; Lúmens ficam guardados separadamente em cada tanque.</p><div class="settings-actions"><button class="primary" id="exportSave">Baixar backup</button><button class="primary" id="importSave">Importar backup</button><input id="importFile" type="file" accept="application/json,.json" hidden><button class="danger wide" id="resetGame">Reiniciar progresso</button></div>`;$('#modal').showModal();$('#exportSave').onclick=()=>{state.creatures=creatures.map(c=>c.serialize());const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Abyss-Garden-v2.14.3-progresso.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#importSave').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const result=SaveManager.importData(await file.text(),defaults);if(!result.ok){toast(result.error);return}location.reload()};$('#resetGame').onclick=()=>{if(confirm('Reiniciar todo o progresso?')){SaveManager.reset();location.reload()}}};
 $('#eventCard').onclick=()=>{if(!event||event.claimed)return;event.claimed=true;$('#eventCard').hidden=true;state.coins+=35;state.pearls++;gainXP(10);burst(dims().w*.5,dims().h*.35,'#fff29a');toast('Fragmento estelar coletado!');renderUI()};
 $('#collectRevenueBtn').onclick=()=>{const amount=collectVisitorRevenue(state);if(!amount){toast('Ainda não há receita para coletar');return}toast(`¤ ${amount} créditos coletados no caixa`);renderStoreHUD();save()};
 ['Todos','Comum','Raro','Épico','Lendário'].forEach(r=>{const b=document.createElement('button');b.textContent=r;b.className=r==='Todos'?'active':'';b.onclick=()=>{selectedFilter=r;$$('#rarityFilters button').forEach(x=>x.classList.toggle('active',x===b));renderUI()};$('#rarityFilters').append(b)});
