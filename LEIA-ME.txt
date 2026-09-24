@@ -1,30 +1,13 @@
-ABYSS GARDEN v2.14.3 — AQUARIUM SHOP CUSTOMERS
+ABYSS GARDEN v2.15.1 — LÚMENS COMPARTILHADOS E GESTÃO DA LOJA
 
-Novidades:
-- Player recortado e alinhado pela base dos pés, reduzindo pulos visuais.
-- Caminhada com 6 frames por direção para player e NPCs.
-- Atendente fixo Mira no balcão.
-- Clientes entram pela porta, visitam 1 a 3 aquários, vão ao caixa, pagam e saem.
-- Pagamento considera raridade, qualidade, estágio, mutação, água e decorações.
-- Valores pagos aparecem acima do caixa e acumulam nos Créditos da Loja.
-- Continua funcionando offline no Windows por duplo clique no index.html.
-
-HOTFIX v2.14.3: restaura updateStorePlayer no código modular e no bundle offline.
-
-CORREÇÕES v2.14.3:
-- Peixes, produção e água continuam simulando enquanto o jogador anda pela loja.
-- A tela inicial não roda a economia/NPCs por trás.
-- Missões do dia reiniciam automaticamente a cada novo dia local.
-- Migração de incubadoras antigas por habitat para aquários físicos.
-- Versão do save alinhada ao schema atual.
-- Receita passiva não duplica pagamentos dos NPCs enquanto a loja está visível.
-- Restaurado updateNearbyPrompt para evitar novo ReferenceError ao desenhar a loja.
-
-
-CORREÇÕES v2.14.3 — COLISÃO E NAVEGAÇÃO:
-- Player não atravessa mais aquários, balcão, estantes ou área de descanso.
-- Colisão usa a posição dos pés para combinar com o sprite.
-- Clientes usam navegação em grade para contornar obstáculos.
-- Rotas são recalculadas ao trocar de aquário, ir ao caixa ou sair da loja.
-- Clientes possuem separação leve para reduzir sobreposição.
-- Clique para caminhar respeita as colisões; se o destino estiver dentro de um móvel, usa o ponto livre mais próximo.
+- Todos os aquários usam um único saldo global de Lúmens.
+- Produção de qualquer peixe entra no mesmo saldo compartilhado.
+- Créditos da Loja ¤ continuam separados e vêm dos clientes.
+- Ovos por habitat: Astral ✦ 160; Jurássico ✦ 10.000; Abissal ✦ 25.000; Mutante ✦ 50.000.
+- Saves antigos somam automaticamente os Lúmens que estavam separados nos tanques.
+- Fila real no caixa: Mira atende um cliente por vez.
+- Clientes têm paciência e satisfação; esperas longas podem reduzir a reputação.
+- Reputação influencia movimento e valor médio das compras.
+- Painel mostra reputação, visitantes, vendas, ticket médio e fila.
+- Colisão e navegação da v2.14.3 foram mantidas.
+- Continua funcionando offline no Windows e no GitHub Pages.
