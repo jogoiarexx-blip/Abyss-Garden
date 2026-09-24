@@ -10,11 +10,17 @@ const uniqueId=()=>`aq-${Date.now().toString(36)}-${Math.random().toString(36).s
 function habitatName(id){return BIOMES.find(b=>b.id===id)?.name||'Habitat';}
 
 export function initializeStore(state){
+  const originalAquariums=Array.isArray(state.aquariums)?state.aquariums:[];
+  const hadAquariums=originalAquariums.length>0;
+  const hasGlobalLumens=Number.isFinite(Number(state.globalLumens));
   const legacyCoins=finite(state.coins,350);
+  const legacyTankLumens=originalAquariums.reduce((sum,aq)=>sum+Math.max(0,finite(aq?.lumens,0)),0);
+  const migratedLumens=hasGlobalLumens?finite(state.globalLumens,350):(hadAquariums?(legacyTankLumens||legacyCoins):legacyCoins);
   const legacyWater=finite(state.water,100);
   const legacyDecor=Array.isArray(state.decor)?[...state.decor]:[];
   state.shopCredits=finite(state.shopCredits,1400);
-  state.aquariums=Array.isArray(state.aquariums)?state.aquariums:[];
+  state.globalLumens=Math.max(0,migratedLumens);
+  state.aquariums=originalAquariums;
 
   if(!state.aquariums.length){
     const creatureHabitats=[...new Set((state.creatures||[]).map(c=>c.habitat).filter(Boolean))];
@@ -26,7 +32,6 @@ export function initializeStore(state){
         slot,
         habitat,
         name:`${habitatName(habitat)} ${slot+1}`,
-        lumens:habitat===(state.biome||'astral')?legacyCoins:120,
         water:finite(oldTank?.water,habitat===(state.biome||'astral')?legacyWater:100),
         decor:Array.isArray(oldTank?.decor)?[...oldTank.decor]:(habitat===(state.biome||'astral')?legacyDecor:[]),
         pendingRevenue:0,
@@ -45,7 +50,6 @@ export function initializeStore(state){
     return {
       id:String(aq.id||uniqueId()),slot,habitat,
       name:String(aq.name||`${habitatName(habitat)} ${index+1}`),
-      lumens:Math.max(0,finite(aq.lumens,index===0?legacyCoins:120)),
       water:Math.max(0,Math.min(100,finite(aq.water,100))),
       decor:Array.isArray(aq.decor)?aq.decor:[],
       pendingRevenue:Math.max(0,finite(aq.pendingRevenue,0)),
@@ -54,7 +58,7 @@ export function initializeStore(state){
   });
 
   if(!state.aquariums.length){
-    state.aquariums=[{id:'aq-starter',slot:0,habitat:'astral',name:'Lago Astral 1',lumens:350,water:100,decor:[],pendingRevenue:0,purchasedAt:Date.now()}];
+    state.aquariums=[{id:'aq-starter',slot:0,habitat:'astral',name:'Lago Astral 1',water:100,decor:[],pendingRevenue:0,purchasedAt:Date.now()}];
   }
   if(!state.aquariums.some(a=>a.id===state.activeAquariumId))state.activeAquariumId=(state.aquariums.find(a=>a.habitat===state.biome)||state.aquariums[0]).id;
   state.biome=activeAquarium(state).habitat;
@@ -62,7 +66,7 @@ export function initializeStore(state){
   for(const key of ['coins','water','decor']){
     try{delete state[key]}catch{}
   }
-  Object.defineProperty(state,'coins',{enumerable:true,configurable:true,get(){return activeAquarium(this).lumens},set(value){activeAquarium(this).lumens=Math.max(0,finite(value,0))}});
+  Object.defineProperty(state,'coins',{enumerable:true,configurable:true,get(){return Math.max(0,finite(this.globalLumens,0))},set(value){this.globalLumens=Math.max(0,finite(value,0))}});
   Object.defineProperty(state,'water',{enumerable:true,configurable:true,get(){return activeAquarium(this).water},set(value){activeAquarium(this).water=Math.max(0,Math.min(100,finite(value,100)))}});
   Object.defineProperty(state,'decor',{enumerable:true,configurable:true,get(){return activeAquarium(this).decor},set(value){activeAquarium(this).decor=Array.isArray(value)?value:[]}});
   return state;
@@ -84,7 +88,7 @@ export function buyAquarium(state,slot,habitat){
   if(state.shopCredits<cost)return {ok:false,reason:'Créditos da loja insuficientes.'};
   state.shopCredits-=cost;
   const n=state.aquariums.filter(a=>a.habitat===habitat).length+1;
-  const aq={id:uniqueId(),slot,habitat,name:`${habitatName(habitat)} ${n}`,lumens:160,water:100,decor:[],pendingRevenue:0,purchasedAt:Date.now()};
+  const aq={id:uniqueId(),slot,habitat,name:`${habitatName(habitat)} ${n}`,water:100,decor:[],pendingRevenue:0,purchasedAt:Date.now()};
   state.aquariums.push(aq);
   return {ok:true,aquarium:aq,cost};
 }
