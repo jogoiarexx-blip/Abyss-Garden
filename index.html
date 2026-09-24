@@ -33,10 +33,10 @@
 
   <div id="app" class="app">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">◉</span><div><strong>ABYSS GARDEN</strong><small id="modeLabel">Galeria aquática · v2.14.3</small></div></div>
+      <div class="brand"><span class="brand-mark">◉</span><div><strong>ABYSS GARDEN</strong><small id="modeLabel">Galeria aquática · v2.15.1</small></div></div>
       <div class="resources" aria-label="Recursos">
         <div class="resource store-credit"><span>¤</span><b id="shopCredits">0</b><small>créditos da loja</small></div>
-        <div class="resource" id="lumensResource"><span>✦</span><b id="coins">0</b><small>lúmens do aquário</small></div>
+        <div class="resource" id="lumensResource"><span>✦</span><b id="coins">0</b><small>lúmens compartilhados</small></div>
         <div class="resource"><span>◈</span><b id="pearls">0</b><small>pérolas</small></div>
         <div class="level"><span>Nível <b id="level">1</b></span><div><i id="xpBar"></i></div></div>
       </div>
@@ -45,10 +45,16 @@
 
     <main id="storeView" class="store-view">
       <canvas id="storeCanvas" aria-label="Loja de aquários. Use WASD ou setas para mover o guardião."></canvas>
-      <div class="store-title-card"><small>GALERIA DO GUARDIÃO</small><h1>Sua loja de aquários</h1><p>Cada tanque tem seus próprios peixes, água e Lúmens.</p></div>
+      <div class="store-title-card"><small>GALERIA DO GUARDIÃO</small><h1>Sua loja de aquários</h1><p>Peixes e água são individuais; os Lúmens são compartilhados entre todos os tanques.</p></div>
       <div class="store-actions">
         <button id="collectRevenueBtn" class="store-action"><span>¤</span><div><b>Caixa da loja</b><small id="pendingRevenueText">Nenhuma receita aguardando</small></div></button>
         <div class="store-help"><kbd>WASD</kbd><kbd>↑↓←→</kbd><span>mover</span><kbd>E</kbd><span>interagir</span></div>
+      </div>
+      <div class="store-metrics" aria-label="Estatísticas da loja">
+        <article><small>REPUTAÇÃO</small><b id="storeReputation">★★★☆☆ 50%</b></article>
+        <article><small>HOJE</small><b id="storeVisitors">0 visitantes · 0 vendas</b></article>
+        <article><small>TICKET MÉDIO</small><b id="storeTicket">¤ 0</b></article>
+        <article><small>FILA DO CAIXA</small><b id="storeQueue">Sem fila</b></article>
       </div>
       <div id="storeToastStack" class="toast-stack store-toast-stack" aria-live="polite"></div>
       <div id="nearbyPrompt" class="nearby-prompt" hidden></div>
