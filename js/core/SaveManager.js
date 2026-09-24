@@ -1,8 +1,8 @@
 const KEY='abyss-garden-save-v5';
 const LEGACY_KEYS=['abyss-garden-save-v4','abyss-garden-save-v3','abyss-garden-save-v2','abyss-garden-save-v1'];
-const SAVE_VERSION=10;
+const SAVE_VERSION=12;
 
-function validSave(parsed){return parsed&&Array.isArray(parsed.creatures)&&(Number.isFinite(parsed.coins)||Array.isArray(parsed.aquariums)||Number.isFinite(parsed.shopCredits))}
+function validSave(parsed){return parsed&&Array.isArray(parsed.creatures)&&(Number.isFinite(parsed.globalLumens)||Number.isFinite(parsed.coins)||Array.isArray(parsed.aquariums)||Number.isFinite(parsed.shopCredits))}
 
 export class SaveManager{
   static load(defaults){
