@@ -4,7 +4,7 @@ import {UPGRADES,upgradeCost,upgradeLevel} from '../systems/UpgradeSystem.js';
 import {SPECIES,rarityColors} from '../data.js';
 import {qualityStars,patternName,profileSummary} from '../systems/GeneticsSystem.js';
 
-export function shopScreen(state){return `<small>MERCADO FLUTUANTE</small><h2>Suprimentos</h2><p>Cuide do habitat, acelere a evolução e inicie novas incubações.</p><div class="screen-grid">${SHOP.map(item=>{const i=item.kind==='egg'?{...item,...EGGS[state.biome],desc:`${eggPreview(state.biome)} · incubação ~${incubationSeconds(state,state.biome)}s`}:item;return `<button class="market-card" data-buy="${i.id}">${i.kind==='egg'?eggArt(state.biome):`<span>${i.icon}</span>`}<div><b>${i.name}</b><small>${i.desc}</small></div><em>✦ ${i.price}</em></button>`}).join('')}</div>`}
+export function shopScreen(state){return `<small>MERCADO FLUTUANTE</small><h2>Suprimentos</h2><p>Os Lúmens são compartilhados entre todos os tanques; cada habitat possui seu próprio preço de ovo.</p><div class="screen-grid">${SHOP.map(item=>{const i=item.kind==='egg'?{...item,...EGGS[state.biome],desc:`${eggPreview(state.biome)} · incubação ~${incubationSeconds(state,state.biome)}s`}:item;return `<button class="market-card" data-buy="${i.id}">${i.kind==='egg'?eggArt(state.biome):`<span>${i.icon}</span>`}<div><b>${i.name}</b><small>${i.desc}</small></div><em>✦ ${i.price}</em></button>`}).join('')}</div>`}
 
 export function labScreen(state,creatures){
   const adults=creatures.filter(c=>['Adulto','Ancião'].includes(c.stage));
