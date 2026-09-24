@@ -2,10 +2,10 @@ import {SPECIES} from '../data.js';
 import {incubationMultiplier} from './UpgradeSystem.js';
 
 export const EGGS={
- astral:{name:'Ovo Astral',type:'Mágico',price:140,position:'0% 0%',weights:[42,24,12,12,7,3],seconds:35},
- jurassic:{name:'Ovo Fóssil',type:'Primordial',price:220,position:'100% 0%',weights:[40,24,12,12,8,4],seconds:50},
- abyss:{name:'Ovo Abissal',type:'Abissal',price:360,position:'0% 100%',weights:[34,23,8,18,11,6],seconds:70},
- mutant:{name:'Ovo Mutante',type:'Mutante',price:480,position:'100% 100%',weights:[40,12,6,21,14,7],seconds:90}
+ astral:{name:'Ovo Astral',type:'Mágico',price:160,position:'0% 0%',weights:[42,24,12,12,7,3],seconds:35},
+ jurassic:{name:'Ovo Fóssil',type:'Primordial',price:10000,position:'100% 0%',weights:[40,24,12,12,8,4],seconds:50},
+ abyss:{name:'Ovo Abissal',type:'Abissal',price:25000,position:'0% 100%',weights:[34,23,8,18,11,6],seconds:70},
+ mutant:{name:'Ovo Mutante',type:'Mutante',price:50000,position:'100% 100%',weights:[40,12,6,21,14,7],seconds:90}
 };
 export function eggSpecies(habitat){const egg=EGGS[habitat];if(!egg)throw Error('Habitat inválido');return SPECIES.filter(s=>s.type===egg.type)}
 export function rollEgg(habitat,random=Math.random){const egg=EGGS[habitat],pool=eggSpecies(habitat);let roll=random()*100;for(let i=0;i<pool.length;i++){roll-=egg.weights[i]??0;if(roll<0)return pool[i]}return pool.at(-1)}
